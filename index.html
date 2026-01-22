@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>舒特尔方格 - 专注力训练</title>
+    <!-- 引入 Tailwind CSS 进行快速样式开发 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 禁止用户选择文本，提升像 App 一样的体验 */
+        body {
+            -webkit-user-select: none;
+            user-select: none;
+            touch-action: manipulation; /* 优化触控响应 */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        /* 动画定义 */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-5px); }
+            40% { transform: translateX(5px); }
+            60% { transform: translateX(-5px); }
+            80% { transform: translateX(5px); }
+        }
+        
+        @keyframes pop {
+            0% { transform: scale(0.95); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .animate-shake {
+            animation: shake 0.3s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        .animate-pop {
+            animation: pop 0.2s ease-out;
+        }
+
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out;
+        }
+
+        /* 网格按钮的基础样式 */
+        .grid-btn {
+            aspect-ratio: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 0.75rem;
+            font-weight: 700;
+            transition: all 0.1s;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .grid-btn:active {
+            transform: scale(0.95);
+            background-color: #f1f5f9;
+        }
+
+        .grid-btn.completed {
+            background-color: #e2e8f0;
+            color: #cbd5e1;
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.06);
+            transform: none;
+            cursor: default;
+        }
+
+        .grid-btn.error {
+            background-color: #fef2f2;
+            color: #ef4444;
+            border: 2px solid #fecaca;
+        }
+
+        /* 隐藏滚动条 */
+        ::-webkit-scrollbar {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-800 h-screen w-screen overflow-hidden flex flex-col">
+
+    <!-- 1. 菜单界面 (默认显示) -->
+    <div id="menu-screen" class="flex-1 flex flex-col items-center justify-center p-6 animate-fade-in">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 space-y-8">
+            <div class="text-center">
+                <h1 class="text-3xl font-extrabold text-slate-900 mb-2">舒特尔方格</h1>
+                <p class="text-slate-500 text-sm">提升专注力与视幅宽度的经典训练</p>
+            </div>
+
+            <!-- 难度选择 -->
+            <div>
+                <label class="block text-sm font-medium text-slate-600 mb-3 text-center">选择网格大小</label>
+                <div class="flex justify-between bg-slate-100 p-1.5 rounded-xl" id="difficulty-selector">
+                    <!-- JS 会在这里生成按钮 -->
+                </div>
+            </div>
+
+            <!-- 规则说明 -->
+            <div class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-center">
+                <p class="text-xs text-blue-700 leading-relaxed">
+                    规则：按顺序快速点击从 <span class="font-bold">1</span> 到 <span class="font-bold" id="max-num-display">25</span> 的数字。<br>
+                    技巧：眼睛盯着屏幕中心，用余光寻找。
+                </p>
+            </div>
+
+            <button onclick="startGame()" class="w-full py-4 bg-slate-900 text-white rounded-xl text-lg font-bold shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="none" class="w-5 h-5"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                开始专注
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. 游戏界面 (默认隐藏) -->
+    <div id="game-screen" class="hidden h-full flex flex-col">
+        <!-- 顶部栏 -->
+        <div class="bg-white shadow-sm px-6 py-4 flex items-center justify-between shrink-0 z-10">
+            <button onclick="showMenu()" class="p-2 -ml-2 text-slate-400 hover:text-slate-700 active:bg-slate-100 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+            </button>
+            
+            <div class="flex flex-col items-center">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">用时</span>
+                <span id="timer-display" class="text-xl font-mono font-bold text-slate-800 w-24 text-center">00:00.00</span>
+            </div>
+
+            <div class="flex flex-col items-end">
+                <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">目标</span>
+                <span id="target-display" class="text-xl font-bold text-blue-600 w-8 text-center bg-blue-50 rounded">1</span>
+            </div>
+        </div>
+
+        <!-- 网格区域 -->
+        <div class="flex-1 flex items-center justify-center p-4">
+            <div id="grid-container" class="grid gap-2 w-full max-w-md mx-auto aspect-square bg-slate-200/50 p-2 rounded-2xl">
+                <!-- JS 会在这里生成方格 -->
+            </div>
+        </div>
+
+        <!-- 底部进度条 -->
+        <div class="h-1.5 bg-slate-200 w-full shrink-0">
+            <div id="progress-bar" class="h-full bg-blue-500 transition-all duration-300 ease-out" style="width: 0%"></div>
+        </div>
+    </div>
+
+    <!-- 3. 结算界面 (默认隐藏) -->
+    <div id="result-screen" class="hidden h-full flex flex-col items-center justify-center p-6 animate-fade-in">
+        <div class="w-full max-w-md bg-white rounded-3xl shadow-xl p-8 text-center">
+            <div class="inline-flex items-center justify-center w-20 h-20 bg-green-100 text-green-600 rounded-full mb-6 animate-pop">
+                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+            </div>
+            
+            <h2 class="text-2xl font-bold text-slate-900 mb-1">挑战完成!</h2>
+            <p id="result-difficulty" class="text-slate-500 text-sm mb-6">难度: 5x5</p>
+
+            <div class="mb-8">
+                <div id="final-time" class="text-5xl font-black text-slate-800 tracking-tighter mb-2">00:00.00</div>
+                <div class="text-sm font-medium text-slate-400 uppercase tracking-wide">最终用时</div>
+            </div>
+
+            <div class="space-y-3">
+                <button onclick="startGame()" class="w-full py-3.5 bg-blue-600 text-white rounded-xl font-bold shadow-lg active:scale-95 transition-transform flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+                    再来一次
+                </button>
+                <button onclick="showMenu()" class="w-full py-3.5 bg-white text-slate-600 border border-slate-200 rounded-xl font-semibold hover:bg-slate-50 active:scale-95 transition-transform">
+                    返回主菜单
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 游戏状态配置
+        const state = {
+            gridSize: 5,
+            numbers: [],
+            currentNumber: 1,
+            startTime: 0,
+            timerInterval: null,
+            isPlaying: false
+        };
+
+        // DOM 元素引用
+        const els = {
+            screens: {
+                menu: document.getElementById('menu-screen'),
+                game: document.getElementById('game-screen'),
+                result: document.getElementById('result-screen')
+            },
+            diffSelector: document.getElementById('difficulty-selector'),
+            maxNumDisplay: document.getElementById('max-num-display'),
+            gridContainer: document.getElementById('grid-container'),
+            timer: document.getElementById('timer-display'),
+            target: document.getElementById('target-display'),
+            progressBar: document.getElementById('progress-bar'),
+            finalTime: document.getElementById('final-time'),
+            resultDifficulty: document.getElementById('result-difficulty')
+        };
+
+        // 初始化
+        function init() {
+            renderDifficultySelector();
+        }
+
+        // 渲染难度选择按钮
+        function renderDifficultySelector() {
+            const sizes = [3, 4, 5, 6, 7];
+            els.diffSelector.innerHTML = '';
+            
+            sizes.forEach(size => {
+                const btn = document.createElement('button');
+                const isSelected = state.gridSize === size;
+                btn.className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                    isSelected ? 'bg-blue-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'
+                }`;
+                btn.textContent = `${size}x${size}`;
+                btn.onclick = () => setDifficulty(size);
+                els.diffSelector.appendChild(btn);
+            });
+        }
+
+        // 设置难度
+        function setDifficulty(size) {
+            state.gridSize = size;
+            els.maxNumDisplay.textContent = size * size;
+            renderDifficultySelector();
+        }
+
+        // 切换界面显示
+        function switchScreen(screenName) {
+            Object.values(els.screens).forEach(el => el.classList.add('hidden'));
+            els.screens[screenName].classList.remove('hidden');
+        }
+
+        function showMenu() {
+            stopTimer();
+            state.isPlaying = false;
+            switchScreen('menu');
+        }
+
+        // Fisher-Yates 洗牌算法
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        // 格式化时间
+        function formatTime(ms) {
+            const minutes = Math.floor(ms / 60000);
+            const seconds = Math.floor((ms % 60000) / 1000);
+            const milliseconds = Math.floor((ms % 1000) / 10);
+            return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${milliseconds.toString().padStart(2, '0')}`;
+        }
+
+        // 开始游戏
+        function startGame() {
+            // 重置状态
+            state.currentNumber = 1;
+            state.isPlaying = true;
+            const total = state.gridSize * state.gridSize;
+            state.numbers = shuffle(Array.from({length: total}, (_, i) => i + 1));
+            
+            // 更新 UI
+            els.target.textContent = '1';
+            els.progressBar.style.width = '0%';
+            els.timer.textContent = '00:00.00';
+            
+            renderGrid();
+            switchScreen('game');
+            
+            // 启动计时
+            state.startTime = Date.now();
+            state.timerInterval = setInterval(() => {
+                const elapsed = Date.now() - state.startTime;
+                els.timer.textContent = formatTime(elapsed);
+            }, 30);
+        }
+
+        // 停止计时
+        function stopTimer() {
+            if (state.timerInterval) {
+                clearInterval(state.timerInterval);
+                state.timerInterval = null;
+            }
+        }
+
+        // 渲染网格
+        function renderGrid() {
+            const container = els.gridContainer;
+            container.innerHTML = '';
+            
+            // 设置 Grid 列数
+            container.className = `grid gap-2 w-full max-w-md mx-auto aspect-square bg-slate-200/50 p-2 rounded-2xl grid-cols-${state.gridSize}`;
+            // 补充 Tailwind 动态类如果没被扫描到，需要手动处理 style
+            container.style.gridTemplateColumns = `repeat(${state.gridSize}, minmax(0, 1fr))`;
+
+            state.numbers.forEach(num => {
+                const btn = document.createElement('div');
+                btn.textContent = num;
+                
+                // 动态字体大小
+                let fontSize = 'text-2xl';
+                if (state.gridSize === 3) fontSize = 'text-4xl';
+                if (state.gridSize >= 6) fontSize = 'text-xl';
+                
+                btn.className = `grid-btn bg-white text-slate-800 ${fontSize}`;
+                
+                // 触摸/点击事件
+                const handler = (e) => {
+                    e.preventDefault(); // 防止双击放大等默认行为
+                    handleTap(num, btn);
+                };
+                
+                btn.addEventListener('touchstart', handler, {passive: false});
+                btn.addEventListener('click', handler); // 兼容鼠标
+                
+                container.appendChild(btn);
+            });
+        }
+
+        // 处理点击
+        function handleTap(num, element) {
+            if (!state.isPlaying || element.classList.contains('completed')) return;
+
+            if (num === state.currentNumber) {
+                // 正确
+                successEffect(element);
+                
+                // 进度条更新
+                const total = state.gridSize * state.gridSize;
+                const progress = (state.currentNumber / total) * 100;
+                els.progressBar.style.width = `${progress}%`;
+
+                if (state.currentNumber === total) {
+                    gameWin();
+                } else {
+                    state.currentNumber++;
+                    els.target.textContent = state.currentNumber;
+                }
+            } else {
+                // 错误
+                errorEffect(element);
+            }
+        }
+
+        // 正确效果
+        function successEffect(el) {
+            el.classList.add('completed', 'animate-pop');
+            el.classList.remove('bg-white', 'text-slate-800');
+            
+            // 简单震动
+            if (navigator.vibrate) navigator.vibrate(10);
+        }
+
+        // 错误效果
+        function errorEffect(el) {
+            el.classList.add('animate-shake', 'error');
+            
+            // 错误震动模式
+            if (navigator.vibrate) navigator.vibrate([50, 50, 50]);
+
+            setTimeout(() => {
+                el.classList.remove('animate-shake', 'error');
+            }, 400);
+        }
+
+        // 游戏胜利
+        function gameWin() {
+            stopTimer();
+            state.isPlaying = false;
+            const elapsed = Date.now() - state.startTime;
+            
+            els.finalTime.textContent = formatTime(elapsed);
+            els.resultDifficulty.textContent = `难度: ${state.gridSize}x${state.gridSize}`;
+            
+            setTimeout(() => {
+                switchScreen('result');
+            }, 500); // 稍微延迟一点让用户看到最后一个数字被点亮
+        }
+
+        // 启动初始化
+        init();
+
+    </script>
+</body>
+</html>
